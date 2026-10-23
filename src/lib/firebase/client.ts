@@ -18,18 +18,30 @@ import {
   ReCaptchaV3Provider,
   type AppCheck,
 } from "firebase/app-check";
+import { PUBLIC_FIREBASE_CONFIG } from "./public-config";
 
 export const USE_FIREBASE_EMULATORS =
   process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true";
 
+// Public web config is committed so a clean checkout works without manual
+// environment setup. Every value can still be overridden for a different
+// Firebase project or for the emulator suite.
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "",
+  apiKey:
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY || PUBLIC_FIREBASE_CONFIG.apiKey,
+  authDomain:
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
+    PUBLIC_FIREBASE_CONFIG.authDomain,
+  projectId:
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    PUBLIC_FIREBASE_CONFIG.projectId,
+  storageBucket:
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    PUBLIC_FIREBASE_CONFIG.storageBucket,
   messagingSenderId:
-    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
+    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ||
+    PUBLIC_FIREBASE_CONFIG.messagingSenderId,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || PUBLIC_FIREBASE_CONFIG.appId,
 };
 
 export interface FirebaseClient {
@@ -111,7 +123,7 @@ export function requireFirebaseClient(): FirebaseClient {
   const client = getFirebaseClient();
   if (!client) {
     throw new Error(
-      "Firebase is not configured. Add the public Firebase values to .env.local.",
+      "Firebase is not configured. Add the public Firebase web configuration to src/lib/firebase/public-config.ts or the NEXT_PUBLIC_FIREBASE_* environment variables.",
     );
   }
   return client;

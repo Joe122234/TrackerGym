@@ -92,28 +92,23 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
-### 2. Configure Firebase
+### 2. Firebase project
 
-1. Create a Firebase project and a Web App in the Firebase Console.
-2. Open **Authentication → Sign-in method** and enable **Anonymous**.
-3. Create a Firestore database.
-4. Copy the environment template:
+FORGE ships with the public web identifiers for its Firebase project in
+`src/lib/firebase/public-config.ts`. A clean checkout therefore builds without
+an `.env.local` file. These values are identifiers, not secrets; Firebase Auth
+and Firestore Security Rules protect the data.
 
-```bash
-cp .env.example .env.local
-```
+Before the first hosted launch, the Firebase project itself must have:
 
-5. Fill `.env.local` with the Web App's public configuration. These values are
-   identifiers, not secrets; access is controlled by Firestore Rules.
-6. Install dependencies:
+1. The **Anonymous** provider enabled under **Authentication → Sign-in method**.
+2. A Firestore database.
+3. The repository's rules and indexes deployed.
+
+Install dependencies and deploy the backend configuration:
 
 ```bash
 npm install
-```
-
-7. Deploy the rules and indexes to the project:
-
-```bash
 firebase login
 firebase use trackerwork-d3271
 firebase deploy --only firestore:rules,firestore:indexes
@@ -121,6 +116,10 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 The Anonymous provider must be enabled **before** the first hosted launch.
 Without it, the app shows a setup error instead of inventing a local identity.
+
+To point a fork at a different Firebase project, copy `.env.example` to
+`.env.local` and fill in the overrides. The committed values remain the
+fallback for any value left blank.
 
 ### 3. Run it
 

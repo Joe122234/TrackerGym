@@ -4,7 +4,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { requireFirebaseClient } from "./client";
+import { firebaseProjectId, requireFirebaseClient } from "./client";
 
 export async function subscribeToAuth(
   callback: (user: User | null) => void,
@@ -34,19 +34,18 @@ export function authErrorMessage(error: unknown): string {
   const code = (error as { code?: string }).code ?? "";
   const messages: Record<string, string> = {
     "auth/operation-not-allowed":
-      "Silent single-user mode is not enabled. Turn on the Anonymous provider in Firebase Authentication.",
+      "Anonymous sign-in is turned off. Open Firebase Console → Authentication → Sign-in method, enable Anonymous, then press Try again.",
     "auth/admin-restricted-operation":
-      "Silent single-user mode is blocked. Turn on the Anonymous provider in Firebase Authentication.",
+      "Anonymous sign-in is blocked. Open Firebase Console → Authentication → Sign-in method, enable Anonymous, then press Try again.",
     "auth/unauthorized-domain":
-      "This domain is not authorized in Firebase Authentication.",
+      "This domain is not authorized in Firebase Authentication. Add it under Authentication → Settings → Authorized domains.",
     "auth/too-many-requests":
       "Firebase temporarily blocked the session request. Wait a moment and retry.",
     "auth/network-request-failed":
       "Network error while opening the private session. Check your connection and retry.",
-    "auth/configuration-not-found":
-      "Firebase Authentication is not configured for this project yet.",
+    "auth/configuration-not-found": `Firebase Authentication is not set up for ${firebaseProjectId || "this project"}. Open Firebase Console → Authentication → Get started, enable the Anonymous provider, then press Try again.`,
     "auth/invalid-api-key":
-      "The Firebase web API key is invalid. Check your public Firebase configuration.",
+      "The Firebase web API key is invalid. Check the public Firebase web configuration for this project.",
   };
   if (messages[code]) return messages[code];
   if (error instanceof Error && error.message) return error.message;
