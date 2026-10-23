@@ -1,99 +1,46 @@
 "use client";
 
 import * as React from "react";
-import type { User } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { SHARED_LOG_ID } from "@/config/user";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
-import {
-  authErrorMessage,
-  ensureAnonymousAuth,
-  subscribeToAuth,
-} from "@/lib/firebase/auth";
+
+/**
+ * The app no longer has a Firebase Auth session. This small context exists so
+ * every data hook can keep using a single owner id while the app switches to
+ * one public Firestore log shared by all devices.
+ */
+export interface SessionUser {
+  uid: string;
+  displayName: string | null;
+}
 
 interface AuthContextValue {
-  user: User | null;
+  user: SessionUser | null;
   loading: boolean;
   configured: boolean;
   error: string | null;
   retry: () => void;
 }
 
+const SHARED_USER: SessionUser = {
+  uid: SHARED_LOG_ID,
+  displayName: null,
+};
+
 const AuthContext = React.createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const [user, setUser] = React.useState<User | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [retryKey, setRetryKey] = React.useState(0);
   const configured = isFirebaseConfigured();
 
-  React.useEffect(() => {
-    if (!configured) {
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    let startingSession = false;
-
-    // There is no sign-in screen. Only the private anonymous identity is
-    // accepted. A named account left behind by an earlier build is detached,
-    // then the durable single-user session is created.
-    const startPrivateSession = () => {
-      if (startingSession) return;
-      startingSession = true;
-      setLoading(true);
-      void ensureAnonymousAuth()
-        .catch((cause) => {
-          if (!active) return;
-          setError(authErrorMessage(cause));
-          setLoading(false);
-        })
-        .finally(() => {
-          startingSession = false;
-        });
-    };
-
-    subscribeToAuth((nextUser) => {
-      if (!active) return;
-      if (nextUser?.isAnonymous) {
-        setUser(nextUser);
-        setLoading(false);
-        setError(null);
-        router.prefetch("/");
-        return;
-      }
-      startPrivateSession();
-    })
-      .then((cleanup) => {
-        if (!active) {
-          cleanup();
-          return;
-        }
-        unsubscribe = cleanup;
-      })
-      .catch((cause) => {
-        if (!active) return;
-        setError(authErrorMessage(cause));
-        setLoading(false);
-      });
-
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, [configured, retryKey, router]);
-
-  const value = React.useMemo(
+  const value = React.useMemo<AuthContextValue>(
     () => ({
-      user,
-      loading,
+      user: configured ? SHARED_USER : null,
+      loading: false,
       configured,
-      error,
-      retry: () => setRetryKey((key) => key + 1),
+      error: null,
+      retry: () => undefined,
     }),
-    [user, loading, configured, error],
+    [configured],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

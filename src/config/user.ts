@@ -1,8 +1,14 @@
 /**
  * FORGE is deliberately a single-person training log. There is no account
- * picker and no visible authentication flow; the app creates a private
- * anonymous Firebase session on this device and seeds this profile once.
+ * system and no per-device identity: every device reads and writes the same
+ * Firestore namespace below `users/{SHARED_LOG_ID}`.
+ *
+ * This namespace is intentionally public. Anyone who has the app link can read
+ * or change the log, which is the trade-off for seamless cross-device sync
+ * without a login.
  */
+export const SHARED_LOG_ID = "shared";
+
 export const SINGLE_USER = {
   displayName: "Henry",
   heightCm: 172,

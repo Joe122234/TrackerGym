@@ -52,8 +52,30 @@ function profile(uid: string) {
   };
 }
 
-describe("per-user Firestore rules", () => {
-  it("allows the owner to read and write their profile", async () => {
+describe("Firestore rules", () => {
+  it("allows any device to use the shared log without signing in", async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(db, "users", "shared", "settings", "profile"),
+        profile("shared"),
+      ),
+    );
+    await assertSucceeds(
+      getDoc(doc(db, "users", "shared", "settings", "profile")),
+    );
+    await assertSucceeds(
+      setDoc(doc(db, "users", "shared", "workoutSessions", "session_1"), {
+        status: "completed",
+        startedAt: 10,
+      }),
+    );
+    await assertSucceeds(
+      getDoc(doc(db, "users", "shared", "workoutSessions", "session_1")),
+    );
+  });
+
+  it("allows the owner to read and write their legacy profile", async () => {
     const db = testEnv.authenticatedContext("user-a").firestore();
     await assertSucceeds(
       setDoc(doc(db, "users", "user-a", "settings", "profile"), profile("a")),
@@ -81,7 +103,7 @@ describe("per-user Firestore rules", () => {
     );
   });
 
-  it("denies anonymous access", async () => {
+  it("denies unauthenticated access outside the shared log", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(
       getDoc(doc(db, "users", "user-a", "settings", "profile")),

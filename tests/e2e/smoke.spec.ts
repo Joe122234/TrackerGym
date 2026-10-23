@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("single-user smoke flow", () => {
-  test("logs a workout without a login screen and persists it", async ({
+  test("logs a workout without a login screen and shares it across devices", async ({
     page,
+    browser,
   }) => {
     await page.goto("/");
 
@@ -64,7 +65,24 @@ test.describe("single-user smoke flow", () => {
       page.getByRole("button", { name: "Dismiss rest timer" }),
     ).toHaveCount(0);
 
-    // A full reload proves the anonymous session and Firestore data survived.
+    const sessionId = new URL(page.url()).searchParams.get("id");
+    expect(sessionId).toBeTruthy();
+
+    // A fresh browser context has no local session or drafts. If it can open
+    // the same session, the workout came from the shared Firestore namespace.
+    const secondContext = await browser.newContext({
+      timezoneId: "Asia/Bangkok",
+    });
+    const secondPage = await secondContext.newPage();
+    await secondPage.goto(
+      `/workouts/session/?id=${encodeURIComponent(sessionId!)}`,
+    );
+    await expect(secondPage.getByRole("heading", { level: 1 })).toHaveText(
+      "Upper",
+    );
+    await secondContext.close();
+
+    // A full reload proves the shared Firestore data survived.
     await page.reload();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Upper");
 

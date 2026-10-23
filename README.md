@@ -2,7 +2,7 @@
 
 FORGE is a dark, mobile-first training log built for one person: **Henry**.
 There is no login screen, email, password, account picker, or onboarding flow.
-Open the app and your log is there.
+Open the app on any device and the same Firestore log is there.
 
 ## What it does
 
@@ -43,33 +43,35 @@ Seed details that are intentionally preserved:
 - Friday Upper excludes JM Press, Close Grip Sitting Row, and Back Extensions.
   It has exactly 12 exercises.
 
-## How identity works
+## How sync works
 
-FORGE has no login UI. On first launch it silently creates a real Firebase
-**anonymous** identity for that browser. The profile is seeded once as Henry,
-70 kg, 172 cm, `Asia/Bangkok`. Firestore Security Rules scope every document to
-that anonymous UID.
+FORGE has no login UI and no Firebase Authentication requirement. Every device
+reads and writes one Firestore namespace: `users/shared`. The first device seeds
+Henry at 70 kg, 172 cm, `Asia/Bangkok`; every other device sees the same data.
 
 That choice has one important trade-off:
 
-- The log follows **this browser's anonymous session**. Reloads, restarts, and
-  the installed PWA keep the same log.
-- Opening FORGE in another browser or after clearing site data creates a new
-  empty anonymous session. The old Firestore data is not reachable from the new
-  session.
-- Use **Settings → Data export** to keep a JSON archive outside Firebase. This
-  build does not provide a cross-device login or an in-app archive importer.
+- Laptop and phone stay in sync automatically. There is no pairing code,
+  browser session, or account to recover.
+- **Anyone who has the app link can read or change the log.** The Firestore
+  path is intentionally public. Keep the link to yourself.
+- Clearing browser storage does **not** lose the log because there is no
+  browser-specific identity.
+- Use **Settings → Data export** for an offline backup, but exports are optional.
 
-The app does not use email/password, Google, or a shared public data path. A
-visitor to the hosted URL gets their own empty anonymous namespace; Firestore
-rules prevent one UID from reading or writing another UID's data.
+The previous build created a different hidden anonymous Firebase account in
+each browser. On first launch, FORGE copies any documents left by that old
+session into the shared log so existing workouts are not stranded. The old
+private paths remain available only to their original signed-in owner for that
+one-time migration.
 
 ## Stack
 
 - Next.js 16 App Router with static export
 - React 19 + TypeScript
 - Tailwind CSS 4
-- Firebase Auth (anonymous only), Firestore, Firebase Hosting
+- Firebase Firestore and Firebase Hosting (no auth provider)
+- One-time legacy migration from the previous anonymous build
 - Recharts, Radix UI, Lucide, Sonner, Zod
 - Vitest for domain tests, Firebase Rules Unit Testing for security tests
 - Playwright for the no-login browser smoke flow
@@ -96,14 +98,12 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 FORGE ships with the public web identifiers for its Firebase project in
 `src/lib/firebase/public-config.ts`. A clean checkout therefore builds without
-an `.env.local` file. These values are identifiers, not secrets; Firebase Auth
-and Firestore Security Rules protect the data.
+an `.env.local` file. These values are identifiers, not secrets.
 
 Before the first hosted launch, the Firebase project itself must have:
 
-1. The **Anonymous** provider enabled under **Authentication → Sign-in method**.
-2. A Firestore database.
-3. The repository's rules and indexes deployed.
+1. A Firestore database.
+2. The repository's rules and indexes deployed.
 
 Install dependencies and deploy the backend configuration:
 
@@ -114,8 +114,8 @@ firebase use trackerwork-d3271
 firebase deploy --only firestore:rules,firestore:indexes
 ```
 
-The Anonymous provider must be enabled **before** the first hosted launch.
-Without it, the app shows a setup error instead of inventing a local identity.
+No Authentication provider or sign-in method is required. The shared
+`users/shared` path is public by design so every device works immediately.
 
 To point a fork at a different Firebase project, copy `.env.example` to
 `.env.local` and fill in the overrides. The committed values remain the
@@ -141,7 +141,7 @@ and the production hosting domain as allowed domains.
 Use the emulators for development and tests, never for live data.
 
 ```bash
-# Terminal 1: Auth, Firestore, Hosting emulator, and Emulator UI
+# Terminal 1: Firestore emulator and Emulator UI
 npm run emulators
 
 # Terminal 2: Next.js connected to the emulators
@@ -150,11 +150,8 @@ npm run dev:emulator -- -p 3001
 
 The emulator UI is at [http://localhost:4000](http://localhost:4000).
 `dev:emulator` only flips `NEXT_PUBLIC_USE_FIREBASE_EMULATORS`; it still uses
-the public Firebase config from `.env.local` for app initialization. The
-emulator suite uses the `demo-forge` project from `.firebaserc` and
-`firebase.json`.
-
-The anonymous provider is available automatically in the Auth emulator.
+the committed public Firebase config for app initialization. The emulator
+suite uses the `demo-forge` project from `.firebaserc` and `firebase.json`.
 
 ## Verification
 
@@ -174,8 +171,8 @@ The Playwright flow verifies the real no-login path:
 2. A template starts without any authentication UI.
 3. One set is logged with an independent weight and rep count.
 4. The workout is finished and saved.
-5. The anonymous session survives a full reload.
-6. History/PR statistics and settings render.
+5. A second browser context opens the same session from shared Firestore.
+6. A full reload and the history/PR/settings views still work.
 
 It uses throwaway emulators and never touches live data.
 
@@ -183,8 +180,8 @@ It uses throwaway emulators and never touches live data.
 # One-time browser install
 npx playwright install chromium
 
-# Emulators must be running
-lsof -ti tcp:9099 >/dev/null && lsof -ti tcp:8080 >/dev/null && echo ready
+# Firestore emulator must be running
+lsof -ti tcp:8080 >/dev/null && echo ready
 
 # Stop any dev server already running in this project first; only one Next dev
 # server can own a project directory at a time.
@@ -207,7 +204,6 @@ Before deploying:
 
 - Log in with the Google account that owns the `trackerwork-d3271` project.
   `firebase projects:list` must show it.
-- Enable **Anonymous** under Firebase Authentication.
 - Confirm Firestore rules and indexes are deployed.
 - The hosted app must be served over HTTPS for the PWA/service worker to work.
   Firebase Hosting supplies HTTPS automatically.
@@ -221,15 +217,15 @@ project.
 
 ## Data and security
 
-Every document lives below `users/{uid}`. `firestore.rules` allows only:
+Every document lives below `users/shared`. `firestore.rules` makes that
+namespace publicly readable and writable so every device can use it without an
+account. **This is not private.** Anyone with the app link can view, change, or
+delete the log.
 
-- an authenticated Firebase user
-- whose auth UID matches `{uid}`
-- for the known collections
-
-Unknown collections are denied. Email/password and Google auth are not used by
-the app, and there is no account deletion or sign-out UI, because either action
-would break the single anonymous session.
+Legacy documents from the previous anonymous build stay below each browser's
+old `users/{uid}` path. Those paths are still available only to their original
+signed-in owner, and the app uses that access once to copy missing documents
+into `users/shared`.
 
 ## Project layout
 
@@ -238,21 +234,22 @@ src/app/(app)/          Home, workouts, progress, body, settings
 src/app/(focus)/        Active workout mode
 src/components/         App shell and UI primitives
 src/domain/             Split seed, workout math, dates, streaks, PRs, units
-src/hooks/              Auth, user data, sessions, drafts, rest timer, measurements
-src/lib/firebase/       Firebase client, auth, Firestore repositories, seed, export
+src/hooks/              Shared-log session, user data, sessions, drafts, timers
+src/lib/firebase/       Firestore client, shared paths, seed, export, migration
 tests/domain/           Pure domain tests
-tests/rules/            Firestore tenant-isolation tests
-tests/e2e/              Playwright no-login smoke flow
-firestore.rules         Per-UID access policy
+tests/rules/            Shared-log and legacy-access tests
+tests/e2e/              Playwright no-login cross-device smoke flow
+firestore.rules         Public shared path plus legacy owner paths
 firebase.json           Hosting, emulator, and cache configuration
 ```
 
 ## Notes
 
-- The live log is only as durable as the browser session and Firebase project.
-  Keep the JSON archive current.
-- Clearing browser storage, using private browsing, or uninstalling the PWA can
-  remove the only local link to the anonymous account.
+- The live log is stored in Firestore and follows the app link, not a browser
+  session. Clearing site data or switching devices does not lose it.
+- Anyone with the link can read or change the data. Keep the link private.
+- The one-time migration copies missing documents from the old per-browser
+  anonymous account. It never deletes the old data.
 - History snapshots are immutable: editing templates or restoring the starting
   split never rewrites completed sessions.
 - Timestamps and streak calculations use the profile timezone, defaulting to

@@ -1,12 +1,5 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
-  browserLocalPersistence,
-  connectAuthEmulator,
-  getAuth,
-  setPersistence,
-  type Auth,
-} from "firebase/auth";
-import {
   connectFirestoreEmulator,
   initializeFirestore,
   persistentLocalCache,
@@ -46,14 +39,12 @@ const firebaseConfig = {
 
 export interface FirebaseClient {
   app: FirebaseApp;
-  auth: Auth;
   db: Firestore;
   appCheck: AppCheck | null;
 }
 
 interface FirebaseGlobal {
   forgeClient?: FirebaseClient;
-  forgeAuthEmulatorConnected?: boolean;
   forgeFirestoreEmulatorConnected?: boolean;
 }
 
@@ -75,7 +66,6 @@ export function getFirebaseClient(): FirebaseClient | null {
   if (globalForFirebase.forgeClient) return globalForFirebase.forgeClient;
 
   const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  const auth = getAuth(app);
   const db = initializeFirestore(app, {
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager(),
@@ -98,23 +88,13 @@ export function getFirebaseClient(): FirebaseClient | null {
   }
 
   if (USE_FIREBASE_EMULATORS) {
-    if (!globalForFirebase.forgeAuthEmulatorConnected) {
-      connectAuthEmulator(auth, "http://127.0.0.1:9099", {
-        disableWarnings: true,
-      });
-      globalForFirebase.forgeAuthEmulatorConnected = true;
-    }
     if (!globalForFirebase.forgeFirestoreEmulatorConnected) {
       connectFirestoreEmulator(db, "127.0.0.1", 8080);
       globalForFirebase.forgeFirestoreEmulatorConnected = true;
     }
   }
 
-  void setPersistence(auth, browserLocalPersistence).catch((error) => {
-    console.error("Unable to set auth persistence", error);
-  });
-
-  const client: FirebaseClient = { app, auth, db, appCheck };
+  const client: FirebaseClient = { app, db, appCheck };
   globalForFirebase.forgeClient = client;
   return client;
 }
@@ -128,5 +108,3 @@ export function requireFirebaseClient(): FirebaseClient {
   }
   return client;
 }
-
-export const firebaseProjectId = firebaseConfig.projectId;

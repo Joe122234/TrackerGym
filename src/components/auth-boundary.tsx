@@ -41,9 +41,9 @@ export function ConfigRequired() {
             Firebase setup required
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            FORGE is a single-user log with no sign-in screen. It still needs a
-            Firebase project to store your workouts across reloads. Add the
-            public web configuration, then restart the app.
+            This build is missing the public Firebase project settings. The
+            normal FORGE build includes them, so a clean checkout should never
+            show this screen.
           </p>
           <div className="mt-5 rounded-xl border border-line bg-canvas-soft p-4 font-mono text-[12px] leading-relaxed text-muted">
             <p className="text-ink">NEXT_PUBLIC_FIREBASE_API_KEY=…</p>
@@ -52,10 +52,8 @@ export function ConfigRequired() {
             <p>NEXT_PUBLIC_FIREBASE_APP_ID=…</p>
           </div>
           <p className="mt-4 text-xs leading-relaxed text-muted-2">
-            Enable the <span className="text-muted">Anonymous</span> provider in
-            Firebase Authentication. See <span className="text-muted">.env.example</span>{" "}
-            and the README for setup and deployment. No paid Firebase plan is
-            required.
+            See <span className="text-muted">src/lib/firebase/public-config.ts</span>{" "}
+            and the README. No login or paid Firebase plan is required.
           </p>
         </div>
       </div>
@@ -89,8 +87,8 @@ function ErrorScreen({
 }
 
 /**
- * Data boundary, not an authentication gate. The anonymous session is opened
- * silently by AuthProvider and never presented to the owner.
+ * Data boundary, not an authentication gate. Every device uses the same public
+ * Firestore namespace, so there is no session to wait for or recover.
  */
 export function AuthBoundary({ children }: { children: React.ReactNode }) {
   const {
@@ -109,7 +107,7 @@ export function AuthBoundary({ children }: { children: React.ReactNode }) {
   } = useUserData();
 
   if (!configured) return <ConfigRequired />;
-  if (authLoading) return <Splash label="Opening your private log" />;
+  if (authLoading) return <Splash label="Opening your shared log" />;
   if (authError) {
     return (
       <ErrorScreen
@@ -119,7 +117,7 @@ export function AuthBoundary({ children }: { children: React.ReactNode }) {
       />
     );
   }
-  if (!user) return <Splash label="Starting your private log" />;
+  if (!user) return <Splash label="Starting your log" />;
   if (dataLoading) return <Splash />;
   if (dataError) {
     return (
@@ -134,7 +132,7 @@ export function AuthBoundary({ children }: { children: React.ReactNode }) {
     return (
       <ErrorScreen
         title="Setup is incomplete"
-        message="The private session exists, but its profile or preferences are missing. Retry setup, or check your Firestore data."
+        message="The shared log exists, but its profile or preferences are missing. Retry setup, or check your Firestore data."
         onRetry={retryData}
       />
     );

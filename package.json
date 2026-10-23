@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "test:rules": "firebase emulators:exec --only firestore --project demo-forge \"vitest run --config vitest.rules.config.mts\"",
     "test:e2e": "playwright test",
-    "emulators": "firebase emulators:start --project demo-forge",
+    "emulators": "firebase emulators:start --only firestore --project demo-forge",
     "preview": "npx serve out",
     "icons": "node scripts/generate-icons.mjs"
   },

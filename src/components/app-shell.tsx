@@ -196,7 +196,7 @@ function Sidebar() {
           <CircleUserRound className="size-4 text-muted-2" />
         </Link>
         <p className="mt-3 px-2 text-[10px] text-muted-2">
-          {BRAND.name} v{BRAND.version} · Private training log
+          {BRAND.name} v{BRAND.version} · Shared training log
         </p>
       </div>
     </aside>

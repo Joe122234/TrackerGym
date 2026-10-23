@@ -15,6 +15,7 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
+  timeout: 90_000,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
@@ -31,7 +32,7 @@ export default defineConfig({
   ],
   webServer: {
     // The smoke flow must run against throwaway emulators, never live data.
-    // Start the Auth and Firestore emulators first with `npm run emulators`.
+    // Start the Firestore emulator first with `npm run emulators`.
     command: `${emulatorEnv} npm run dev -- -p 3100`,
     url: "http://localhost:3100",
     reuseExistingServer: !process.env.CI,

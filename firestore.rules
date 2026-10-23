@@ -2,6 +2,21 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // FORGE deliberately has no login. Every device reads and writes the same
+    // single-user namespace. This means anyone who has the app link can read
+    // or change the log. That is the accepted trade-off for automatic sync
+    // across devices without accounts.
+    match /users/shared {
+      allow read, write: if true;
+    }
+
+    match /users/shared/{document=**} {
+      allow read, write: if true;
+    }
+
+    // Legacy data from the previous per-browser anonymous build. These paths
+    // remain available only to their old signed-in owner so the app can copy
+    // existing workouts into the shared log once.
     function signedIn() {
       return request.auth != null;
     }
@@ -10,9 +25,6 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // Every document lives under the signed-in user's namespace. Unknown
-    // subcollections are denied implicitly. Cross-account reads and writes
-    // must never be possible.
     match /users/{uid}/settings/{settingId} {
       allow read, write: if isOwner(uid)
         && settingId in ['profile', 'preferences'];

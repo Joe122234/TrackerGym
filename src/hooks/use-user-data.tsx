@@ -22,6 +22,7 @@ import {
 } from "@/domain/schemas";
 import { WEEKDAYS } from "@/domain/types";
 import { getFirebaseClient } from "@/lib/firebase/client";
+import { migrateLegacyLogIfNeeded } from "@/lib/firebase/migrate-legacy";
 import { ensureUserInitialized } from "@/lib/firebase/seed";
 import {
   exerciseDefinitionsCollection,
@@ -60,13 +61,17 @@ function snapshotError(cause: unknown): string {
 export function UserDataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [profile, setProfile] = React.useState<Profile | null>(null);
-  const [preferences, setPreferences] = React.useState<Preferences | null>(null);
+  const [preferences, setPreferences] = React.useState<Preferences | null>(
+    null,
+  );
   const [templates, setTemplates] = React.useState<WorkoutTemplate[]>([]);
   const [schedule, setSchedule] = React.useState<ScheduleEntry[]>([]);
   const [exerciseDefinitions, setExerciseDefinitions] = React.useState<
     ExerciseDefinition[]
   >([]);
-  const [loadedParts, setLoadedParts] = React.useState<Record<string, boolean>>({});
+  const [loadedParts, setLoadedParts] = React.useState<Record<string, boolean>>(
+    {},
+  );
   const [seeding, setSeeding] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [retryKey, setRetryKey] = React.useState(0);
@@ -117,7 +122,9 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
             }
             const parsed = parser(snapshot.data());
             if (!parsed) {
-              setError(`The ${part} document is malformed and could not be read.`);
+              setError(
+                `The ${part} document is malformed and could not be read.`,
+              );
             } else {
               onData(parsed);
             }
@@ -132,108 +139,107 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
       );
     };
 
-    void ensureUserInitialized(user.uid)
-      .then(() => {
-        if (!active) return;
-        setSeeding(false);
+    void (async () => {
+      await migrateLegacyLogIfNeeded();
+      await ensureUserInitialized(user.uid);
+      if (!active) return;
+      setSeeding(false);
 
-        subscribeDoc(
-          profileRef(client.db, user.uid),
-          "profile",
-          (data) => {
-            const result = profileSchema.safeParse(data);
-            return result.success ? result.data : null;
-          },
-          setProfile,
-        );
-        subscribeDoc(
-          preferencesRef(client.db, user.uid),
-          "preferences",
-          (data) => {
-            const result = preferencesSchema.safeParse(data);
-            return result.success ? result.data : null;
-          },
-          setPreferences,
-        );
+      subscribeDoc(
+        profileRef(client.db, user.uid),
+        "profile",
+        (data) => {
+          const result = profileSchema.safeParse(data);
+          return result.success ? result.data : null;
+        },
+        setProfile,
+      );
+      subscribeDoc(
+        preferencesRef(client.db, user.uid),
+        "preferences",
+        (data) => {
+          const result = preferencesSchema.safeParse(data);
+          return result.success ? result.data : null;
+        },
+        setPreferences,
+      );
 
-        unsubscribes.push(
-          onSnapshot(
-            exerciseDefinitionsCollection(client.db, user.uid),
-            (snapshot) => {
-              if (!active) return;
-              const parsed: ExerciseDefinition[] = [];
-              for (const document of snapshot.docs) {
-                const result = exerciseDefinitionSchema.safeParse(
-                  document.data(),
-                );
-                if (result.success) parsed.push(result.data);
-              }
-              parsed.sort((a, b) => a.name.localeCompare(b.name));
-              setExerciseDefinitions(parsed);
-              markLoaded("exercises");
-            },
-            (cause) => {
-              if (!active) return;
-              setError(snapshotError(cause));
-              markLoaded("exercises");
-            },
-          ),
-        );
-
-        unsubscribes.push(
-          onSnapshot(
-            templatesCollection(client.db, user.uid),
-            (snapshot) => {
-              if (!active) return;
-              const parsed: WorkoutTemplate[] = [];
-              for (const document of snapshot.docs) {
-                const result = workoutTemplateSchema.safeParse(document.data());
-                if (result.success) parsed.push(result.data);
-              }
-              parsed.sort((a, b) => a.createdAt - b.createdAt);
-              setTemplates(parsed);
-              markLoaded("templates");
-            },
-            (cause) => {
-              if (!active) return;
-              setError(snapshotError(cause));
-              markLoaded("templates");
-            },
-          ),
-        );
-
-        unsubscribes.push(
-          onSnapshot(
-            scheduleCollection(client.db, user.uid),
-            (snapshot) => {
-              if (!active) return;
-              const parsed: ScheduleEntry[] = [];
-              for (const document of snapshot.docs) {
-                const result = scheduleEntrySchema.safeParse(document.data());
-                if (result.success) parsed.push(result.data);
-              }
-              parsed.sort(
-                (a, b) =>
-                  WEEKDAYS.indexOf(a.day) - WEEKDAYS.indexOf(b.day),
+      unsubscribes.push(
+        onSnapshot(
+          exerciseDefinitionsCollection(client.db, user.uid),
+          (snapshot) => {
+            if (!active) return;
+            const parsed: ExerciseDefinition[] = [];
+            for (const document of snapshot.docs) {
+              const result = exerciseDefinitionSchema.safeParse(
+                document.data(),
               );
-              setSchedule(parsed);
-              markLoaded("schedule");
-            },
-            (cause) => {
-              if (!active) return;
-              setError(snapshotError(cause));
-              markLoaded("schedule");
-            },
-          ),
-        );
-      })
-      .catch((cause) => {
-        if (!active) return;
-        setError(
-          `Setup could not finish. ${cause instanceof Error ? cause.message : "Please retry."}`,
-        );
-        setSeeding(false);
-      });
+              if (result.success) parsed.push(result.data);
+            }
+            parsed.sort((a, b) => a.name.localeCompare(b.name));
+            setExerciseDefinitions(parsed);
+            markLoaded("exercises");
+          },
+          (cause) => {
+            if (!active) return;
+            setError(snapshotError(cause));
+            markLoaded("exercises");
+          },
+        ),
+      );
+
+      unsubscribes.push(
+        onSnapshot(
+          templatesCollection(client.db, user.uid),
+          (snapshot) => {
+            if (!active) return;
+            const parsed: WorkoutTemplate[] = [];
+            for (const document of snapshot.docs) {
+              const result = workoutTemplateSchema.safeParse(document.data());
+              if (result.success) parsed.push(result.data);
+            }
+            parsed.sort((a, b) => a.createdAt - b.createdAt);
+            setTemplates(parsed);
+            markLoaded("templates");
+          },
+          (cause) => {
+            if (!active) return;
+            setError(snapshotError(cause));
+            markLoaded("templates");
+          },
+        ),
+      );
+
+      unsubscribes.push(
+        onSnapshot(
+          scheduleCollection(client.db, user.uid),
+          (snapshot) => {
+            if (!active) return;
+            const parsed: ScheduleEntry[] = [];
+            for (const document of snapshot.docs) {
+              const result = scheduleEntrySchema.safeParse(document.data());
+              if (result.success) parsed.push(result.data);
+            }
+            parsed.sort(
+              (a, b) => WEEKDAYS.indexOf(a.day) - WEEKDAYS.indexOf(b.day),
+            );
+            setSchedule(parsed);
+            markLoaded("schedule");
+          },
+          (cause) => {
+            if (!active) return;
+            setError(snapshotError(cause));
+            markLoaded("schedule");
+          },
+        ),
+      );
+    })().catch((cause) => {
+      if (!active) return;
+      setError(
+        `Setup could not finish. ${cause instanceof Error ? cause.message : "Please retry."}`,
+      );
+      setSeeding(false);
+    });
 
     return () => {
       active = false;
@@ -271,7 +277,9 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <UserDataContext.Provider value={value}>{children}</UserDataContext.Provider>
+    <UserDataContext.Provider value={value}>
+      {children}
+    </UserDataContext.Provider>
   );
 }
 

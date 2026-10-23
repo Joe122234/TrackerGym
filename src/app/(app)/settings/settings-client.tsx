@@ -9,7 +9,6 @@ import {
   Download,
   FileJson,
   FileSpreadsheet,
-  KeyRound,
   LayoutGrid,
   RotateCcw,
   Smartphone,
@@ -442,15 +441,15 @@ export function SettingsClient() {
       <PageHeader
         eyebrow="Settings"
         title="Your system"
-        description="Profile, training defaults, install state, and exports. This log is yours alone and opens without a sign-in screen."
+        description="Profile, training defaults, install state, and exports. One Firestore log, shared by every device that opens the link, with no sign-in screen."
       />
 
       <div className="mt-6 grid items-start gap-4 lg:grid-cols-2">
         <div className="space-y-4">
           <SettingsCard
             icon={<UserRound className="size-4" />}
-            title="This device"
-            description="A single-user log with no email, password, or onboarding."
+            title="Shared log"
+            description="One Firestore log for every device. No email, password, or onboarding."
           >
             <div className="flex items-center gap-3 rounded-2xl border border-line bg-canvas-soft/45 p-4">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-lime/20 bg-lime/10 text-[12px] font-semibold text-lime">
@@ -461,7 +460,7 @@ export function SettingsClient() {
                   {profile.displayName}
                 </p>
                 <p className="truncate text-[10px] text-muted-2">
-                  Private training log
+                  Shared training log
                 </p>
               </div>
               <Badge variant="outline">No login</Badge>
@@ -495,10 +494,11 @@ export function SettingsClient() {
               </div>
             </div>
             <p className="mt-3 flex items-start gap-2 text-[10px] leading-relaxed text-muted-2">
-              <KeyRound className="mt-0.5 size-3 shrink-0" />
-              FORGE silently keeps a private Firebase session on this browser.
-              No email or password is ever requested. This log is tied to this
-              browser, so export a copy before clearing site data.
+              <Database className="mt-0.5 size-3 shrink-0" />
+              Workouts are stored in one Firestore document tree and appear on
+              every device that opens the app link. There is no account or
+              device pairing. Anyone with the link can access the data, so keep
+              the link private.
             </p>
           </SettingsCard>
 
@@ -603,8 +603,8 @@ export function SettingsClient() {
               The JSON archive includes profile, preferences, templates, the
               weekly split, every session including an active draft, body
               measurements, and derived PR/achievement records. Keep a copy
-              outside Firebase. This build keeps the live log on this browser
-              session rather than a cross-device login.
+              outside Firebase. The live log is already shared through
+              Firestore, so exports are optional backups.
             </p>
           </SettingsCard>
         </div>
@@ -828,9 +828,9 @@ export function SettingsClient() {
       </div>
 
       <div className="mt-6 flex items-center gap-2 border-t border-line/60 pt-4 text-[10px] text-muted-2">
-        <KeyRound className="size-3" />
-        Data is stored privately for this browser in Firebase. Export a JSON
-        copy before clearing site data.
+        <Database className="size-3" />
+        Data is stored in Firebase and shared across every device with the app
+        link. Export a JSON copy if you want an offline backup.
         <span className="ml-auto flex items-center gap-1">
           <Weight className="size-3" /> Canonical kg/cm
         </span>

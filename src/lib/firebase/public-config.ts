@@ -2,9 +2,10 @@
  * The public Firebase web configuration for this single-user project.
  *
  * Firebase web config values are identifiers, not secrets. They are safe to
- * ship in a browser bundle and are protected by Firebase Auth and Firestore
- * Security Rules. Environment variables can still override any value for the
- * emulator suite or a different Firebase project.
+ * ship in a browser bundle. Firestore Security Rules make the shared log
+ * publicly accessible by design; see `firestore.rules` and the README.
+ * Environment variables can still override any value for the emulator suite or
+ * a different Firebase project.
  */
 export const PUBLIC_FIREBASE_CONFIG = {
   apiKey: "AIzaSyDKQjajRDz0NDo5zpd3dFV6-GYIkAGePyE",
