@@ -72,7 +72,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
       data-scroll-behavior="smooth"
     >
-      <body className="min-h-full">
+      <body className="min-h-full" suppressHydrationWarning>
         <AppErrorBoundary>
           <AppProviders>{children}</AppProviders>
         </AppErrorBoundary>

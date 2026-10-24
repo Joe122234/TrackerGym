@@ -316,11 +316,24 @@ export function recentUniquePrs(
   records: PersonalRecord[],
   limit = 4,
 ): PersonalRecord[] {
+  const priority: Record<PersonalRecord["metric"], number> = {
+    maxWeight: 0,
+    repsAtWeight: 1,
+    targetPerformance: 2,
+    exerciseVolume: 3,
+    sessionVolume: 4,
+    estimated1RM: 99,
+  };
   const seen = new Set<string>();
   const result: PersonalRecord[] = [];
   for (const record of [...records].sort(
-    (a, b) => b.achievedAt - a.achievedAt,
+    (a, b) =>
+      priority[a.metric] - priority[b.metric] ||
+      b.achievedAt - a.achievedAt,
   )) {
+    // FORGE is built around 8-rep work. Keep the stored estimate for
+    // compatibility, but do not surface it as a headline achievement.
+    if (record.metric === "estimated1RM") continue;
     const key = `${record.exerciseId}_${record.metric}`;
     if (seen.has(key)) continue;
     seen.add(key);

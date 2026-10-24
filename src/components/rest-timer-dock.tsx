@@ -30,13 +30,13 @@ export function RestTimerDock({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "pointer-events-none fixed inset-x-0 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 md:bottom-6 md:justify-end md:px-6",
+        "pointer-events-none fixed inset-x-0 bottom-[calc(5.9rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 md:bottom-6 md:justify-end md:px-6",
         className,
       )}
     >
       <div
         className={cn(
-          "pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border bg-surface/95 shadow-2xl shadow-black/50 backdrop-blur-xl animate-slide-up",
+          "pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border bg-surface/95 shadow-2xl shadow-black/50 backdrop-blur-md animate-slide-up",
           done ? "border-lime/40" : "border-line-strong",
         )}
         role="status"

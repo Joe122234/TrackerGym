@@ -208,13 +208,13 @@ function MobileHeader() {
   const { user } = useAuth();
   const displayName = profile?.displayName || user?.displayName || "Athlete";
   return (
-    <header className="safe-top sticky top-0 z-30 flex items-center justify-between border-b border-line/70 bg-canvas/80 px-4 py-3 backdrop-blur-xl md:hidden">
+    <header className="safe-top sticky top-0 z-30 flex items-center justify-between border-b border-line/70 bg-canvas/95 px-4 py-3 backdrop-blur-md md:hidden">
       <Link href="/" aria-label="FORGE home">
         <Wordmark />
       </Link>
       <Link
         href="/settings/"
-        className="flex size-9 items-center justify-center rounded-full border border-line bg-elevated text-[10px] font-semibold text-lime"
+        className="flex size-11 items-center justify-center rounded-full border border-line bg-elevated text-[10px] font-semibold text-lime"
         aria-label="Open settings"
       >
         {initials(displayName)}
@@ -227,10 +227,10 @@ function MobileNav() {
   const pathname = usePathname();
   return (
     <nav
-      className="nav-safe fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-canvas/90 px-2 pt-1.5 backdrop-blur-xl md:hidden"
+      className="nav-safe fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-canvas/95 px-1.5 pt-1.5 backdrop-blur-md md:hidden"
       aria-label="Main navigation"
     >
-      <div className="mx-auto flex max-w-lg items-stretch justify-around">
+      <div className="mx-auto flex max-w-lg items-stretch">
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item.href, item.exact);
           const Icon = item.icon;
@@ -240,19 +240,19 @@ function MobileNav() {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[10px] font-medium transition-colors",
+                "flex min-h-11 min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1 text-[9px] font-medium transition-colors",
                 active ? "text-lime" : "text-muted-2 active:text-ink",
               )}
             >
               <span
                 className={cn(
-                  "flex h-7 w-10 items-center justify-center rounded-lg transition-colors",
+                  "flex h-7 w-11 items-center justify-center rounded-lg transition-colors",
                   active && "bg-lime/10",
                 )}
               >
                 <Icon className="size-[19px]" />
               </span>
-              {item.label}
+              <span className="max-w-full truncate">{item.label}</span>
             </Link>
           );
         })}
@@ -297,7 +297,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main
           id="page-content"
-          className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 sm:pt-7 md:px-8 md:pb-16"
+          className="mx-auto w-full max-w-6xl px-4 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 sm:pt-7 md:px-8 md:pb-16"
         >
           <div className="mb-4">
             <OfflineBanner />

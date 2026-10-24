@@ -5,10 +5,13 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarDays,
+  Dumbbell,
+  Gauge,
   LineChart as LineChartIcon,
   Plus,
   Ruler,
   Scale,
+  Target,
   Trash2,
 } from "lucide-react";
 import {
@@ -33,6 +36,7 @@ import {
   round,
 } from "@/domain/units";
 import { formatDateKey, todayKey } from "@/domain/dates";
+import { buildExerciseProgressRows } from "@/domain/insights";
 import {
   deleteMeasurement,
   upsertMeasurement,
@@ -40,6 +44,7 @@ import {
 import { updateProfile } from "@/lib/firebase/profile";
 import { useAuth } from "@/hooks/use-auth";
 import { useMeasurements } from "@/hooks/use-measurements";
+import { useSessions } from "@/hooks/use-sessions";
 import { useUserData } from "@/hooks/use-user-data";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +101,15 @@ const METRIC_LABELS: Record<string, string> = Object.fromEntries(
   BUILT_INS.map((entry) => [entry.metric, entry.label]),
 );
 
+interface CompareRow {
+  metric: string;
+  label: string;
+  before: BodyMeasurement;
+  after: BodyMeasurement;
+  delta: ReturnType<typeof deltaText>;
+  order: number;
+}
+
 function displayValue(
   measurement: BodyMeasurement,
   weightUnit: WeightUnit,
@@ -130,8 +144,9 @@ function deltaText(
 
 export function BodyClient() {
   const { user } = useAuth();
-  const { profile } = useUserData();
+  const { profile, exerciseDefinitions } = useUserData();
   const { measurements, loading, error } = useMeasurements();
+  const { sessions } = useSessions();
   const [now] = React.useState(() => Date.now());
   const timezone = profile?.timezone ?? "Asia/Bangkok";
   const today = todayKey(timezone, now);
@@ -150,6 +165,15 @@ export function BodyClient() {
     null,
   );
   const [deleting, setDeleting] = React.useState(false);
+  const [compareFromState, setCompareFromState] = React.useState<
+    string | null
+  >(null);
+  const [compareToState, setCompareToState] = React.useState<string | null>(
+    null,
+  );
+  const [relativeLiftId, setRelativeLiftId] = React.useState<string | null>(
+    null,
+  );
 
   const bodyWeights = React.useMemo(
     () =>
@@ -169,6 +193,91 @@ export function BodyClient() {
           weightUnit,
           measurementUnit,
         )
+      : null;
+
+  const measurementDates = React.useMemo(
+    () => [...new Set(measurements.map((measurement) => measurement.date))].sort(),
+    [measurements],
+  );
+  const compareFrom =
+    compareFromState && measurementDates.includes(compareFromState)
+      ? compareFromState
+      : (measurementDates[0] ?? null);
+  const compareTo =
+    compareToState && measurementDates.includes(compareToState)
+      ? compareToState
+      : (measurementDates.at(-1) ?? null);
+
+  const compareRows = React.useMemo(() => {
+    if (!compareFrom || !compareTo) return [];
+    const metrics = [...new Set(measurements.map((measurement) => measurement.metric))];
+    const builtInOrder = new Map(
+      BUILT_INS.map((entry, index) => [entry.metric, index]),
+    );
+    return metrics
+      .map((metric) => {
+        const sorted = measurements
+          .filter((measurement) => measurement.metric === metric)
+          .sort(
+            (a, b) =>
+              a.date.localeCompare(b.date) || a.createdAt - b.createdAt,
+          );
+        const before =
+          [...sorted].reverse().find((measurement) => measurement.date <= compareFrom) ??
+          null;
+        const after =
+          [...sorted].reverse().find((measurement) => measurement.date <= compareTo) ??
+          null;
+        if (!before || !after) return null;
+        const source = after ?? before;
+        const delta = deltaText(
+          after.value,
+          before.value,
+          source.unit,
+          weightUnit,
+          measurementUnit,
+        );
+        return {
+          metric,
+          label: source.label || METRIC_LABELS[metric] || metric,
+          before,
+          after,
+          delta,
+          order: builtInOrder.get(metric) ?? 99,
+        };
+      })
+      .filter((row): row is CompareRow => row !== null)
+      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  }, [measurements, compareFrom, compareTo, weightUnit, measurementUnit]);
+
+  const relativeLifts = React.useMemo(() => {
+    const completedDates = sessions
+      .filter((session) => session.status === "completed")
+      .map((session) => session.scheduledDate)
+      .sort();
+    return buildExerciseProgressRows({
+      sessions,
+      definitions: exerciseDefinitions,
+      start: completedDates[0] ?? today,
+      end: today,
+    })
+      .filter(
+        (row) => row.bestWeightKg !== null && row.category !== "cardio",
+      )
+      .sort(
+        (a, b) =>
+          (b.bestWeightKg ?? 0) - (a.bestWeightKg ?? 0) ||
+          a.name.localeCompare(b.name),
+      );
+  }, [sessions, exerciseDefinitions, today]);
+  const relativeLift =
+    relativeLifts.find((row) => row.exerciseId === relativeLiftId) ??
+    relativeLifts[0] ??
+    null;
+  const bodyweightForRatio = latestWeight?.value ?? profile?.weightKg ?? null;
+  const relativeRatio =
+    relativeLift?.bestWeightKg && bodyweightForRatio
+      ? round(relativeLift.bestWeightKg / bodyweightForRatio, 2)
       : null;
 
   const chartData = React.useMemo(
@@ -369,10 +478,238 @@ export function BodyClient() {
         <StatTile
           label="Entries"
           value={measurements.length}
-          hint={`${latestByMetric.length} tracked metrics`}
+          hint={`${latestByMetric.length} tracked ${
+            latestByMetric.length === 1 ? "metric" : "metrics"
+          }`}
           icon={<CalendarDays className="size-4" />}
           accent="blue"
         />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <Card className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                <CalendarDays className="size-4 text-muted-2" /> Then vs now
+              </h2>
+              <p className="mt-0.5 text-[11px] text-muted">
+                Pick two dates. FORGE uses the nearest entry on or before each.
+              </p>
+            </div>
+            <Badge variant="outline">
+              {compareRows.length}{" "}
+              {compareRows.length === 1 ? "metric" : "metrics"}
+            </Badge>
+          </div>
+
+          {measurementDates.length < 2 ? (
+            <div className="mt-4 rounded-xl border border-dashed border-line bg-canvas-soft/30 px-4 py-8 text-center">
+              <CalendarDays className="mx-auto size-4 text-muted-2" />
+              <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                Log at least two dates to compare where you started with where
+                you are now.
+              </p>
+              <Button
+                className="mt-3"
+                variant="secondary"
+                onClick={openAdd}
+              >
+                <Plus /> Log measurement
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <div>
+                  <Label htmlFor="compare-from">Then</Label>
+                  <Select
+                    value={compareFrom ?? ""}
+                    onValueChange={(value) => {
+                      setCompareFromState(value);
+                      if (compareTo && value > compareTo) {
+                        setCompareToState(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      id="compare-from"
+                      className="mt-1.5 h-10 text-xs"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {measurementDates.map((measurementDate) => (
+                        <SelectItem key={measurementDate} value={measurementDate}>
+                          {formatDateKey(measurementDate, "MMM d, yyyy")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="compare-to">Now</Label>
+                  <Select
+                    value={compareTo ?? ""}
+                    onValueChange={(value) => {
+                      setCompareToState(value);
+                      if (compareFrom && value < compareFrom) {
+                        setCompareFromState(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      id="compare-to"
+                      className="mt-1.5 h-10 text-xs"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {measurementDates.map((measurementDate) => (
+                        <SelectItem key={measurementDate} value={measurementDate}>
+                          {formatDateKey(measurementDate, "MMM d, yyyy")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {compareRows.length === 0 ? (
+                <p className="mt-4 rounded-xl border border-dashed border-line bg-canvas-soft/30 px-4 py-6 text-center text-[11px] leading-relaxed text-muted">
+                  These dates do not share a tracked metric yet. Pick a later
+                  “now” date or log another measurement.
+                </p>
+              ) : (
+                <div className="mt-3 divide-y divide-line/60">
+                  {compareRows.map((row) => (
+                    <div
+                      key={row.metric}
+                      className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-medium text-ink">
+                          {row.label}
+                        </p>
+                        <p className="mt-0.5 text-[9px] text-muted-2">
+                          {formatDateKey(row.before.date, "MMM d")} →{" "}
+                          {formatDateKey(row.after.date, "MMM d")}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="tabular text-[10px] text-muted-2">
+                          {displayValue(row.before, weightUnit, measurementUnit)}
+                        </p>
+                        <p className="tabular text-[11px] font-semibold text-ink">
+                          {displayValue(row.after, weightUnit, measurementUnit)}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "tabular min-w-14 text-right text-[10px] font-medium",
+                          row.delta.direction === "up"
+                            ? "text-warning"
+                            : row.delta.direction === "down"
+                              ? "text-success"
+                              : "text-muted-2",
+                        )}
+                      >
+                        {row.delta.text}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="mt-3 border-t border-line/60 pt-3 text-[10px] text-muted-2">
+                Direction is not good or bad on its own. Use it as context for
+                training and how you feel.
+              </p>
+            </>
+          )}
+        </Card>
+
+        <Card className="flex flex-col p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                <Gauge className="size-4 text-muted-2" /> Relative strength
+              </h2>
+              <p className="mt-0.5 text-[11px] text-muted">
+                Best 8-rep load ÷ bodyweight
+              </p>
+            </div>
+            <Target className="size-4 text-lime/70" aria-hidden />
+          </div>
+
+          {relativeLifts.length === 0 ? (
+            <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-line bg-canvas-soft/30 px-4 py-8 text-center">
+              <Dumbbell className="size-4 text-muted-2" />
+              <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                Complete a strength session to see your best 8-rep load in
+                context.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4">
+                <Label htmlFor="relative-lift">Lift</Label>
+                <Select
+                  value={relativeLift?.exerciseId ?? ""}
+                  onValueChange={(value) => setRelativeLiftId(value)}
+                >
+                  <SelectTrigger
+                    id="relative-lift"
+                    className="mt-1.5 h-10 text-xs"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {relativeLifts.map((row) => (
+                      <SelectItem key={row.exerciseId} value={row.exerciseId}>
+                        {row.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-lime/20 bg-lime/[0.055] p-4">
+                <div className="flex items-end justify-between gap-3">
+                  <p className="tabular text-[2rem] font-semibold leading-none tracking-[-0.05em] text-lime">
+                    {relativeRatio === null ? "—" : `${relativeRatio.toFixed(2)}×`}
+                  </p>
+                  <Badge variant="lime">bodyweight</Badge>
+                </div>
+                <p className="mt-2 truncate text-[11px] font-medium text-ink">
+                  {relativeLift?.name}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted">
+                  Best completed 8-rep set, not an estimated max.
+                </p>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-line bg-canvas-soft/40 p-3">
+                  <p className="flex items-center gap-1 text-[9px] uppercase tracking-[0.12em] text-muted-2">
+                    <Dumbbell className="size-3" /> Best set
+                  </p>
+                  <p className="tabular mt-1.5 text-[11px] font-semibold text-ink">
+                    {formatWeight(relativeLift?.bestWeightKg ?? null, weightUnit)} ×{" "}
+                    {relativeLift?.bestReps ?? "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-line bg-canvas-soft/40 p-3">
+                  <p className="flex items-center gap-1 text-[9px] uppercase tracking-[0.12em] text-muted-2">
+                    <Scale className="size-3" /> Bodyweight
+                  </p>
+                  <p className="tabular mt-1.5 text-[11px] font-semibold text-ink">
+                    {formatWeight(bodyweightForRatio, weightUnit)}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
@@ -452,6 +789,7 @@ export function BodyClient() {
                       strokeWidth={2}
                       dot={{ r: 3, fill: "#C5F467", strokeWidth: 0 }}
                       activeDot={{ r: 5, fill: "#C5F467", strokeWidth: 0 }}
+                      isAnimationActive={false}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -589,7 +927,7 @@ export function BodyClient() {
                 </p>
                 <Button
                   variant="ghost"
-                  size="iconSm"
+                  size="icon"
                   onClick={() => setDeleteTarget(measurement)}
                   aria-label={`Delete ${measurement.label} measurement`}
                   className="text-muted-2 hover:text-danger"

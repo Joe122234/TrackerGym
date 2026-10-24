@@ -69,6 +69,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, MetricRing, SectionHeading, StatTile } from "@/components/ui/layout";
 import { Sparkline } from "@/components/ui/sparkline";
+import { RecapButton } from "@/components/recap/recap-dialog";
 
 function greetingFor(timezone: string, now: number): string {
   const hour = Number(formatTimestamp(now, timezone, "H"));
@@ -411,12 +412,42 @@ export function HomeClient() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <RecapButton
+            label="Recap"
+            initialRange="week"
+            iconOnly
+            size="icon"
+            className="sm:hidden"
+            sessions={sessions}
+            records={records}
+            measurements={measurements}
+            definitions={exerciseDefinitions}
+            schedule={schedule}
+            profile={profile}
+            today={today}
+          />
           <Button asChild variant="secondary" size="icon" className="sm:hidden">
             <Link href="/workouts/?tab=history" aria-label="Workout history">
               <History />
             </Link>
           </Button>
-          <Button asChild variant="secondary" size="sm" className="hidden sm:inline-flex">
+          <RecapButton
+            label="Recap"
+            initialRange="week"
+            className="hidden sm:inline-flex"
+            sessions={sessions}
+            records={records}
+            measurements={measurements}
+            definitions={exerciseDefinitions}
+            schedule={schedule}
+            profile={profile}
+            today={today}
+          />
+          <Button
+            asChild
+            variant="secondary"
+            className="hidden sm:inline-flex"
+          >
             <Link href="/workouts/?tab=history">
               <History /> History
             </Link>
@@ -705,7 +736,10 @@ export function HomeClient() {
                 <p className="tabular mt-0.5 text-sm font-semibold">
                   {streakStats.completedThisWeek}{" "}
                   <span className="font-normal text-muted">
-                    / {streakStats.plannedThisWeek} sessions
+                    / {streakStats.plannedThisWeek}{" "}
+                    {streakStats.plannedThisWeek === 1
+                      ? "session"
+                      : "sessions"}
                   </span>
                 </p>
               </div>
@@ -713,7 +747,8 @@ export function HomeClient() {
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.12em] text-muted-2">Best</p>
                   <p className="tabular text-sm font-semibold">
-                    {streakStats.longest} days
+                    {streakStats.longest}{" "}
+                    {streakStats.longest === 1 ? "day" : "days"}
                   </p>
                 </div>
                 <div>
@@ -736,7 +771,7 @@ export function HomeClient() {
           </div>
           <Link
             href="/progress/"
-            className="flex items-center gap-1 text-[11px] font-medium text-muted transition-colors hover:text-lime"
+            className="flex min-h-11 items-center gap-1 text-[11px] font-medium text-muted transition-colors hover:text-lime"
           >
             Calendar <ChevronRight className="size-3.5" />
           </Link>
@@ -786,6 +821,32 @@ export function HomeClient() {
             );
           })}
         </div>
+        {nextTraining && nextTrainingTemplate ? (
+          <div className="mt-3 flex items-center gap-3 rounded-xl border border-line/70 bg-canvas-soft/35 p-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-elevated text-lime">
+              <Dumbbell className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-2">
+                Next up
+              </p>
+              <p className="mt-0.5 truncate text-[12px] font-semibold text-ink">
+                {nextTrainingTemplate.name}
+              </p>
+            </div>
+            <span className="shrink-0 text-right text-[10px] text-muted-2">
+              {formatDateKey(nextTraining.date, "EEE, MMM d")}
+            </span>
+            <Button asChild variant="ghost" size="icon">
+              <Link
+                href="/workouts/?tab=schedule"
+                aria-label="Open weekly schedule"
+              >
+                <ChevronRight />
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -822,11 +883,11 @@ export function HomeClient() {
         <section>
           <SectionHeading
             title="Recent records"
-            description="Derived from completed sets only."
+            description="8-rep marks and volume. No estimated maxes."
             action={
               <Link
                 href="/progress/"
-                className="text-[11px] font-medium text-muted transition-colors hover:text-lime"
+                className="inline-flex min-h-11 items-center text-[11px] font-medium text-muted transition-colors hover:text-lime"
               >
                 All records
               </Link>
@@ -992,7 +1053,7 @@ export function HomeClient() {
                 <Scale className="size-5" />
               </span>
             )}
-            <Button asChild variant="secondary" size="sm">
+            <Button asChild variant="secondary">
               <Link href="/body/">Log weight</Link>
             </Button>
           </div>

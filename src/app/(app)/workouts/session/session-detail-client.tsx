@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   Circle,
   Clock3,
   Dumbbell,
@@ -33,6 +34,7 @@ import {
   formatDateKey,
   formatDurationLong,
   formatTimestamp,
+  todayKey,
 } from "@/domain/dates";
 import {
   getSessionSetCounts,
@@ -47,9 +49,11 @@ import {
 } from "@/domain/units";
 import { deleteCompletedSession } from "@/lib/firebase/sessions";
 import { useAuth } from "@/hooks/use-auth";
+import { useMeasurements } from "@/hooks/use-measurements";
 import { useSessions } from "@/hooks/use-sessions";
 import { useUserData } from "@/hooks/use-user-data";
 import { cn } from "@/lib/utils";
+import { SessionSummary } from "@/components/recap/session-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -142,20 +146,43 @@ function ExerciseResult({
   exercise,
   unit,
   prs,
+  defaultOpen = false,
 }: {
   exercise: SessionExercise;
   unit: "kg" | "lb";
   prs: WorkoutSummary["prs"];
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  const contentId = React.useId();
   const completed = exercise.sets.filter(
     (set) => set.status === "completed",
   ).length;
-  const exercisePrs = prs.filter(
-    (pr) => pr.exerciseId === exercise.exerciseId,
-  );
+  const prPriority = {
+    maxWeight: 0,
+    repsAtWeight: 1,
+    targetPerformance: 2,
+    exerciseVolume: 3,
+    sessionVolume: 4,
+    estimated1RM: 99,
+  } as const;
+  const allExercisePrs = prs
+    .filter(
+      (pr) =>
+        pr.exerciseId === exercise.exerciseId && pr.metric !== "estimated1RM",
+    )
+    .sort((a, b) => prPriority[a.metric] - prPriority[b.metric]);
+  const exercisePrs = allExercisePrs.slice(0, 2);
+  const hiddenPrCount = Math.max(0, allExercisePrs.length - exercisePrs.length);
   return (
     <Card className="overflow-hidden">
-      <div className="flex items-start gap-3 p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-11 w-full items-start gap-3 p-4 text-left transition-colors hover:bg-elevated/30"
+        aria-expanded={open}
+        aria-controls={contentId}
+      >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-elevated text-muted-2">
           <Dumbbell className="size-4" />
         </span>
@@ -165,10 +192,18 @@ function ExerciseResult({
               {exercise.name}
             </h3>
             {exercisePrs.map((pr) => (
-              <Badge key={`${pr.scopeKey}-${pr.metric}`} variant="lime">
+              <Badge
+                key={`${exercise.exerciseId}-${pr.metric}-${pr.scopeKey}`}
+                variant="lime"
+              >
                 <Trophy className="size-3" /> {pr.label}
               </Badge>
             ))}
+            {hiddenPrCount > 0 ? (
+              <Badge variant="outline">
+                +{hiddenPrCount} {hiddenPrCount === 1 ? "mark" : "marks"}
+              </Badge>
+            ) : null}
           </div>
           <p className="mt-0.5 text-[10px] text-muted-2">
             {completed}/{exercise.sets.length} sets ·{" "}
@@ -181,12 +216,30 @@ function ExerciseResult({
             </p>
           ) : null}
         </div>
-      </div>
-      <div className="space-y-1.5 border-t border-line/60 bg-canvas-soft/25 p-3">
-        {exercise.sets.map((set) => (
-          <SetResult key={set.id} set={set} unit={unit} />
-        ))}
-      </div>
+        <ChevronDown
+          className={cn(
+            "mt-1 size-4 shrink-0 text-muted-2 transition-transform duration-200",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          id={contentId}
+          className="space-y-1.5 border-t border-line/60 bg-canvas-soft/25 p-3"
+        >
+          {exercise.sets.map((set) => (
+            <SetResult key={set.id} set={set} unit={unit} />
+          ))}
+        </div>
+      ) : (
+        <div id={contentId} className="sr-only">
+          {exercise.sets.map((set) => (
+            <SetResult key={set.id} set={set} unit={unit} />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -198,7 +251,8 @@ export function SessionDetailClient() {
   const finished = searchParams.get("finished") === "1";
   const { user } = useAuth();
   const { sessions, loading, error, retry } = useSessions();
-  const { profile } = useUserData();
+  const { measurements } = useMeasurements();
+  const { profile, exerciseDefinitions, schedule } = useUserData();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [waitExpired, setWaitExpired] = React.useState(false);
@@ -206,6 +260,24 @@ export function SessionDetailClient() {
   const session = id
     ? sessions.find((candidate) => candidate.id === id) ?? null
     : null;
+  const previousSession = React.useMemo(() => {
+    if (!session) return null;
+    const sessionTime = session.completedAt ?? session.startedAt;
+    return (
+      sessions
+        .filter(
+          (candidate) =>
+            candidate.status === "completed" &&
+            candidate.id !== session.id &&
+            candidate.templateName === session.templateName &&
+            (candidate.completedAt ?? candidate.startedAt) < sessionTime,
+        )
+        .sort(
+          (a, b) =>
+            (b.completedAt ?? b.startedAt) - (a.completedAt ?? a.startedAt),
+        )[0] ?? null
+    );
+  }, [sessions, session]);
 
   React.useEffect(() => {
     setWaitExpired(false);
@@ -289,6 +361,9 @@ export function SessionDetailClient() {
   }
 
   const summary = summaryFor(session);
+  const visiblePrs = summary.prs.filter(
+    (pr) => pr.metric !== "estimated1RM",
+  );
   const counts = getSessionSetCounts(session);
   const volume = summary.totalVolumeKg || getTotalVolumeKg(session);
   const finishedDate = formatTimestamp(
@@ -323,77 +398,84 @@ export function SessionDetailClient() {
       />
 
       {finished ? (
-        <div className="mt-5 flex items-start gap-3 rounded-panel border border-lime/20 bg-lime/[0.045] p-4">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-lime/25 bg-lime/10 text-lime">
-            <Check className="size-4" />
-          </span>
-          <div>
-            <p className="text-[12px] font-semibold text-ink">
-              Workout saved to your record.
-            </p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
-              PRs and records were calculated from completed sets only.
-            </p>
+        <SessionSummary
+          session={session}
+          previousSession={previousSession}
+          sessions={sessions}
+          records={[]}
+          measurements={measurements}
+          definitions={exerciseDefinitions}
+          schedule={schedule}
+          profile={profile}
+          today={todayKey(profile?.timezone ?? session.timezone)}
+        />
+      ) : (
+        <>
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatTile
+              label="Duration"
+              value={formatDurationLong(summary.durationSeconds)}
+              hint={formatDateKey(session.scheduledDate, "EEE, MMM d")}
+              icon={<Clock3 className="size-4" />}
+              accent="lime"
+            />
+            <StatTile
+              label="Sets"
+              value={`${counts.completed}/${counts.total}`}
+              hint={
+                counts.skipped > 0
+                  ? `${counts.skipped} skipped · ${counts.pending} incomplete`
+                  : `${counts.pending} left incomplete`
+              }
+              icon={<Check className="size-4" />}
+            />
+            <StatTile
+              label="Volume"
+              value={
+                session.workoutType === "cardio"
+                  ? "—"
+                  : formatVolume(volume, unit)
+              }
+              hint={`${summary.volumeIncludedSets} numeric sets`}
+              icon={<Weight className="size-4" />}
+              accent="violet"
+            />
+            <StatTile
+              label="PR marks"
+              value={visiblePrs.length}
+              hint={
+                visiblePrs.length > 0
+                  ? visiblePrs.map((pr) => pr.label).join(", ")
+                  : "No records this session"
+              }
+              icon={<Trophy className="size-4" />}
+              accent="blue"
+            />
           </div>
-        </div>
-      ) : null}
 
-      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          label="Duration"
-          value={formatDurationLong(summary.durationSeconds)}
-          hint={formatDateKey(session.scheduledDate, "EEE, MMM d")}
-          icon={<Clock3 className="size-4" />}
-          accent="lime"
-        />
-        <StatTile
-          label="Sets"
-          value={`${counts.completed}/${counts.total}`}
-          hint={
-            counts.skipped > 0
-              ? `${counts.skipped} skipped · ${counts.pending} incomplete`
-              : `${counts.pending} left incomplete`
-          }
-          icon={<Check className="size-4" />}
-        />
-        <StatTile
-          label="Volume"
-          value={session.workoutType === "cardio" ? "—" : formatVolume(volume, unit)}
-          hint={`${summary.volumeIncludedSets} numeric sets`}
-          icon={<Weight className="size-4" />}
-          accent="violet"
-        />
-        <StatTile
-          label="PR marks"
-          value={summary.prs.length}
-          hint={
-            summary.prs.length > 0
-              ? summary.prs.map((pr) => pr.label).join(", ")
-              : "No records this session"
-          }
-          icon={<Trophy className="size-4" />}
-          accent="blue"
-        />
-      </div>
-
-      {summary.prs.length > 0 ? (
-        <div className="mt-4 rounded-panel border border-lime/20 bg-lime/[0.04] p-4">
-          <div className="flex items-center gap-2">
-            <Flame className="size-4 text-lime" />
-            <p className="text-[12px] font-semibold text-ink">
-              New personal records
-            </p>
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {summary.prs.map((pr) => (
-              <Badge key={`${pr.scopeKey}-${pr.metric}`} variant="lime">
-                {pr.label} · {pr.value}
-                {pr.unit}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      ) : null}
+          {visiblePrs.length > 0 ? (
+            <div className="mt-4 rounded-panel border border-lime/20 bg-lime/[0.04] p-4">
+              <div className="flex items-center gap-2">
+                <Flame className="size-4 text-lime" />
+                <p className="text-[12px] font-semibold text-ink">
+                  New personal records
+                </p>
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {visiblePrs.map((pr) => (
+                  <Badge
+                    key={`${pr.exerciseId ?? "session"}-${pr.metric}-${pr.scopeKey}`}
+                    variant="lime"
+                  >
+                    {pr.label} · {pr.value}
+                    {pr.unit}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
 
       <div className="mt-7">
         <SectionHeading
@@ -487,12 +569,13 @@ export function SessionDetailClient() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {session.exercises.map((exercise) => (
+            {session.exercises.map((exercise, index) => (
               <ExerciseResult
                 key={exercise.id}
                 exercise={exercise}
                 unit={unit}
                 prs={summary.prs}
+                defaultOpen={index === 0 && !finished}
               />
             ))}
           </div>
